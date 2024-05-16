@@ -2,6 +2,7 @@
 * Transparent panels - Cinnamon desktop extension
 * Transparentize your panels when there are no any maximized windows
 * Copyright (C) 2016  Germán Franco Dorca
+* Copyright (C) 2024  Anaxímeno Brito
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -23,62 +24,45 @@ const config = imports.misc.config;
 
 const META_WINDOW_MAXIMIZED = (Meta.MaximizeFlags.VERTICAL | Meta.MaximizeFlags.HORIZONTAL);
 
-function PolicyBase(controller) {
-	this._init(controller);
-}
 
-PolicyBase.prototype = {
-	_init: function (controller) {
+class PolicyBase {
+	constructor (controller) {
 		this.controller = controller;
-	},
+	}
 
-	enable: function () {
-	},
+	enable() {  }
 
-	disable: function () {
-	},
+	disable() {  }
 
-	is_transparent: function (panel) {
+	is_transparent(panel) {
 		return true;
 	}
-};
-
-function MaximizedPolicy(controller) {
-	this._init(controller);
 }
 
-MaximizedPolicy.prototype = {
-	__proto__: PolicyBase.prototype,
-
-	_init: function (controller) {
-		PolicyBase.prototype._init.call(this, controller);
-
+class MaximizedPolicy extends PolicyBase {
+	constructor(controller) {
+		super(controller);
+		this.transparent = [];
 		let n_monitors = global.screen.get_n_monitors();
-		this.transparent = new Array(n_monitors);
-		while(n_monitors--) this.transparent[n_monitors] = true;
-	},
+		for (let i = 0 ; i < n_monitors ; ++i) {
+			this.transparent.push(true);
+		}
+	}
 
-	enable: function () {
+	enable() {
 		this._signals = new SignalManager.SignalManager(null);
 
-		if (config.PACKAGE_VERSION < "5.4") {
-			this._signals.connect(global.window_manager, "maximize", this._on_window_appeared, this);
-			this._signals.connect(global.window_manager, "unmaximize", this._on_window_disappeared, this);
-		} else {
-			this._signals.connect(global.window_manager, "size-change", this._on_window_size_changed, this);
-			this._signals.connect(global.window_manager, "unminimize", this._on_window_appeared, this);
-		}
-
+		this._signals.connect(global.window_manager, "size-change", this._on_window_size_changed, this);
+		this._signals.connect(global.window_manager, "unminimize", this._on_window_appeared, this);
 		this._signals.connect(global.window_manager, "map", this._on_window_appeared, this);
-
 		this._signals.connect(global.window_manager, "minimize", this._on_window_disappeared, this);
 		this._signals.connect(global.screen, "window-removed", this.lookup_all_monitors, this);
 		this._signals.connect(global.window_manager, "switch-workspace", this.lookup_all_monitors, this);
 
 		this._set_up_startup_signals();
-	},
+	}
 
-	disable: function () {
+	disable() {
 		this._signals.disconnectAllSignals();
 		this._signals = null;
 
@@ -88,16 +72,16 @@ MaximizedPolicy.prototype = {
 		}
 
 		this.controller = null;
-	},
+	}
 
-	is_transparent: function (panel) {
+	is_transparent(panel) {
 		return this.transparent[panel.monitorIndex];
-	},
+	}
 
 	// No windows present at startup, but we need to connect to desktops somehow.
 	// Listen to a window-created when they don"t exist yet until any
 	// window gains focus, when all are supposed to be created (can be improved).
-	_set_up_startup_signals: function () {
+	_set_up_startup_signals() {
 		let windows = global.display.list_windows(0);
 
 		if(windows.length == 0) { // When the extension is loaded at startup
@@ -109,15 +93,15 @@ MaximizedPolicy.prototype = {
 				this._on_window_added_startup(global.display, windows[i]);
 		}
 		this.controller.on_state_change(-1);
-	},
+	}
 
-	_disconnect_startup_signals: function () {
+	_disconnect_startup_signals() {
 		this._startup_signals.disconnectAllSignals();
 		this._startup_signals = null;
-	},
+	}
 
 	// Parse windows status at startup
-	_on_window_added_startup: function (display, win) {
+	_on_window_added_startup(display, win) {
 		if(win.get_window_type() === Meta.WindowType.DESKTOP) {
 			this._signals.connect(win, "focus", this._on_desktop_focused, this);
 		} else if(this._is_window_maximized(win)) {
@@ -127,38 +111,38 @@ MaximizedPolicy.prototype = {
 				this.controller.on_state_change(monitor);
 			}
 		}
-	},
+	}
 
-	_is_window_maximized: function (win) {
+	_is_window_maximized(win) {
 		return !win.minimized &&
 			(win.get_maximized() & META_WINDOW_MAXIMIZED) === META_WINDOW_MAXIMIZED &&
 			win.get_window_type() !== Meta.WindowType.DESKTOP;
-	},
+	}
 
-	_on_window_appeared: function (wm, win) {
+	_on_window_appeared(wm, win) {
 		let metawin = win.get_meta_window();
 		let monitor = metawin.get_monitor();
 		if(this._is_window_maximized(metawin) && this.transparent[monitor]) {
 			this.transparent[monitor] = false;
 			this.controller.on_state_change(monitor);
 		}
-	},
+	}
 
-	_on_window_disappeared: function (wm, win) {
+	_on_window_disappeared(wm, win) {
 		if(win.get_meta_window)
 			win = win.get_meta_window();
 		this.lookup_windows_state(win.get_monitor());
-	},
+	}
 
-	_on_window_size_changed: function (wm, win, change) {
+	_on_window_size_changed(wm, win, change) {
 		if (change === Meta.SizeChange.MAXIMIZE) {
 			this._on_window_appeared(wm, win);
 		} else if (change === Meta.SizeChange.UNMAXIMIZE || change === Meta.SizeChange.TILE) {
 			this._on_window_disappeared(wm, win);
 		}
-	},
+	}
 
-	_on_desktop_focused: function (desktop) {
+	_on_desktop_focused(desktop) {
 		if(desktop.get_window_type() !== Meta.WindowType.DESKTOP)
 			return;
 
@@ -176,9 +160,9 @@ MaximizedPolicy.prototype = {
 			this.lookup_all_monitors();
 		};
 		this._signals.connect(global.display, "notify::focus-window", focus_lost);
-	},
+	}
 
-	_any_maximized_window: function (monitor) {
+	_any_maximized_window(monitor) {
 		let workspace = global.screen.get_active_workspace();
 		let windows = workspace.list_windows();
 
@@ -188,17 +172,17 @@ MaximizedPolicy.prototype = {
 				return true;
 		}
 		return false;
-	},
+	}
 
-	lookup_windows_state: function (monitor) {
+	lookup_windows_state(monitor) {
 		let maximized = this._any_maximized_window(monitor);
 		if(maximized === this.transparent[monitor]) {
 			this.transparent[monitor] = !maximized;
 			this.controller.on_state_change(monitor);
 		}
-	},
+	}
 
-	lookup_all_monitors: function () {
+	lookup_all_monitors() {
 		let monitors = global.screen.get_n_monitors();
 		for(let i = 0; i < monitors; i++)
 			this.lookup_windows_state(i);

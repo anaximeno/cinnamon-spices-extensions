@@ -2,6 +2,7 @@
 * Transparent panels - Cinnamon desktop extension
 * Transparentize your panels when there are no any maximized windows
 * Copyright (C) 2016  Germán Franco Dorca
+* Copyright (C) 2024  Anaxímeno Brito
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -19,28 +20,25 @@
 
 const Main = imports.ui.main;
 
-function PanelFilter() {
-	this._init();
-}
 
-PanelFilter.prototype = {
-	_init: function () {
+class PanelFilter {
+	constructor() {
 		this.panels = [];
 		this.filter = [true, true, true, true];
 
 		// for..of doesn't work here because panel[0] is undefined
 		Main.getPanels().forEach(panel => this.panels.push(panel));
-	},
+	}
 
-	for_each_panel: function (callback, monitor) {
+	for_each_panel(callback, monitor) {
 		for(let i = 0; i < this.panels.length; i++) {
 			let panel = this.panels[i];
 			if(panel.monitorIndex === monitor || monitor < 0)
 				callback(panel, monitor);
 		}
-	},
+	}
 
-	add: function (loc) {
+	add(loc) {
 		if(this.filter[loc])
 			return;
 
@@ -50,9 +48,9 @@ PanelFilter.prototype = {
 		});
 
 		this.filter[loc] = true;
-	},
+	}
 
-	remove: function (loc) {
+	remove(loc) {
 		if(!this.filter[loc])
 			return;
 

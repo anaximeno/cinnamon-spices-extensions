@@ -2,6 +2,7 @@
 * Transparent panels - Cinnamon desktop extension
 * Transparentize your panels when there are no any maximized windows
 * Copyright (C) 2016  Germán Franco Dorca
+* Copyright (C) 2024  Anaxímeno Brito
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -29,37 +30,32 @@ const St = imports.gi.St;
 const Util = imports.misc.util;
 const SignalManager = imports.misc.signalManager;
 
-let Filter, Policies;
-if (typeof require !== 'undefined') {
-	Filter = require('./filter');
-	Policies = require('./policies');
-} else {
-	const Self = imports.ui.extensionSystem.extensions[UUID];
-	Filter = Self.filter;
-	Policies = Self.policies;
-}
+const Filter = require('./filter');
+const Policies = require('./filter');
+
 
 const ANIMATIONS_DURATION = 200;
 const INTERNAL_PREFIX = "__internal";
 
+Gettext.bindtextdomain(UUID, GLib.get_home_dir() + "/.local/share/locale");
 
 function _(str) {
 	let customTranslation = Gettext.dgettext(UUID, str);
+
 	if(customTranslation !== str) {
 		return customTranslation;
 	}
+
 	return Gettext.gettext(str);
 }
 
-function MyExtension(meta) {
-	this._init(meta);
-}
 
-MyExtension.prototype = {
-	_init: function (meta) {
+class MyExtension {
+	constructor(meta) {
 		this.meta = meta;
 		this._signals = new SignalManager.SignalManager(null);
 		this._panel_status = new Array(Main.panelManager.panelCount);
+
 		for(let i = 0; i < this._panel_status.length; i++)
 			this._panel_status[i] = false;
 
@@ -78,21 +74,18 @@ MyExtension.prototype = {
 
 		this._signals.connect(Main.layoutManager, 'monitors-changed', this.on_monitors_changed, this);
 		this._classname = this.theme_defined ? this.transparency_type : this.transparency_type + INTERNAL_PREFIX;
+	}
 
-		Gettext.bindtextdomain(meta.uuid, GLib.get_home_dir() + "/.local/share/locale");
-	},
-
-	enable: function () {
+	enable() {
 		this._update_filter();
 		this.policy.enable();
-
 		if(this.settings.getValue("first-launch")) {
 			this.settings.setValue("first-launch", false);
 			this._show_startup_notification();
 		}
-	},
+	}
 
-	disable: function () {
+	disable() {
 		this.policy.disable();
 		this.settings.finalize();
 		this.settings = null;
@@ -100,16 +93,16 @@ MyExtension.prototype = {
 		this._signals = null;
 
 		Main.getPanels().forEach(panel => this.make_transparent(panel, false));
-	},
+	}
 
-	on_state_change: function (monitor) {
+	on_state_change(monitor) {
 		this._filter.for_each_panel(panel => {
 			let transparentize = this.policy.is_transparent(panel);
 			this.make_transparent(panel, transparentize);
 		}, monitor);
-	},
+	}
 
-	make_transparent: function (panel, transparent) {
+	make_transparent(panel, transparent) {
 		if(transparent === this._panel_status[panel.panelId-1])
 			return;
 		if(transparent) {
@@ -122,9 +115,9 @@ MyExtension.prototype = {
 			panel.actor.remove_style_class_name(this._classname);
 		}
 		this._panel_status[panel.panelId-1] = transparent;
-	},
+	}
 
-	_set_background_opacity: function (panel, alpha) {
+	_set_background_opacity(panel, alpha) {
 		let actor = panel.actor;
 		let color = actor.get_background_color();
 		color.alpha = alpha;
@@ -132,9 +125,9 @@ MyExtension.prototype = {
 		actor.set_easing_duration(ANIMATIONS_DURATION);
 		actor.set_background_color(color);
 		actor.restore_easing_state();
-	},
+	}
 
-	_update_filter: function () {
+	_update_filter() {
 		if(this.enable_position_top) this._filter.add(Panel.PanelLoc.top);
 		else this._filter.remove(Panel.PanelLoc.top);
 
@@ -146,9 +139,9 @@ MyExtension.prototype = {
 
 		if(this.enable_position_left) this._filter.add(Panel.PanelLoc.left);
 		else this._filter.remove(Panel.PanelLoc.left);
-	},
+	}
 
-	on_settings_changed: function () {
+	on_settings_changed() {
 		// Remove old classes
 		Main.getPanels().forEach(panel => this.make_transparent(panel, false));
 
@@ -159,9 +152,9 @@ MyExtension.prototype = {
 		this._update_filter();
 
 		this.on_state_change(-1);
-	},
+	}
 
-	on_monitors_changed: function () {
+	on_monitors_changed() {
 		Main.getPanels().forEach(panel => this.make_transparent(panel, false));
 
 		this._panel_status = new Array(Main.panelManager.panelCount);
@@ -172,11 +165,11 @@ MyExtension.prototype = {
 		this.policy = new Policies.MaximizedPolicy(this);
 		this.policy.enable();
 		this.on_state_change(-1);
-	},
+	}
 
 	// This will be called only once, the first time the extension is loaded.
 	// It's not worth it to create a separate class, so we build everything here.
-	_show_startup_notification: function () {
+	_show_startup_notification() {
 		let source = new MessageTray.Source(this.meta.name);
 		let params = {
 			icon: new St.Icon({
@@ -195,9 +188,9 @@ MyExtension.prototype = {
 
 		Main.messageTray.add(source);
 		source.notify(notification);
-	},
+	}
 
-	launch_settngs: function () {
+	launch_settngs() {
 		Util.spawnCommandLine("xlet-settings extension " + this.meta.uuid);
 	}
 };
