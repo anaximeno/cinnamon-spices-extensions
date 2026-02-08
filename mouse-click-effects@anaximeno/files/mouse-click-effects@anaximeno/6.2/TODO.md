@@ -1,0 +1,15 @@
+### TO DO
+- [x] Refactor code for better efficiency
+- [x] Use Map instead of object for icon cache
+- [x] Use GLib.timeout_add instead of Util.setTimeout for better main loop integration
+- [x] Add proper JSDoc documentation
+- [x] Implement Throttler utility class
+- [x] Better error handling with try-catch
+- [x] Use optional chaining for safer property access
+- [x] Optimize mouse movement tracker with direct property updates
+- [x] Add safeDestroy utility for cleanup
+- [x] Move constants to separate module
+- [x] Pre-bind handlers to avoid creating new functions
+- [ ] Implement idle watcher animation feature
+- [ ] Add more animation modes
+- [ ] Consider using CSS transitions where possible
