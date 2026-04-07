@@ -1,0 +1,74 @@
+/* Super Scale – macOS Mission Control-inspired stylesheet
+ *
+ * Natural dark overlay with subtle depth cues, hover scaling,
+ * organic window shadows and clean captions.
+ */
+
+/* ─── Background shade ──────────────────────────────────── */
+
+.super-scale-background-shade {
+    background-color: rgba(0, 0, 0, 0.75);
+}
+
+/* ─── Window shadow (inside each tile actor) ─────────────── */
+
+.super-scale-shadow {
+    background-color: rgba(0, 0, 0, 0.18);
+    border-radius: 8px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.55);
+}
+
+/* ─── Window caption (icon + title below each thumbnail) ── */
+
+.super-scale-window-caption {
+    background-color: rgba(30, 30, 30, 0.82);
+    border-radius: 8px;
+    padding: 4px 12px;
+    spacing: 7px;
+    color: rgba(255, 255, 255, 0.82);
+    font-size: 10.5pt;
+    font-weight: 500;
+}
+
+.super-scale-window-caption:focus {
+    background-color: rgba(255, 255, 255, 0.18);
+    color: white;
+}
+
+/* ─── Selection border ──────────────────────────────────── */
+
+.super-scale-window-border {
+    border: 3px solid rgba(255, 255, 255, 0.5);
+    border-radius: 6px;
+}
+
+/* ─── Close button (macOS-style circle) ──────────────────── */
+
+.super-scale-close-button {
+    background-color: rgba(180, 180, 180, 0.45);
+    border-radius: 13px;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+}
+
+.super-scale-close-button:hover {
+    background-color: rgba(255, 69, 58, 0.95);
+}
+
+/* ─── Close button icon ─────────────────────────────────── */
+
+.super-scale-close-icon {
+    icon-size: 14px;
+    color: white;
+}
+
+/* ─── Empty placeholder ─────────────────────────────────── */
+
+.super-scale-empty-placeholder {
+    background-color: rgba(38, 38, 38, 0.4);
+    border-radius: 12px;
+    padding: 16px 32px;
+    color: rgba(255, 255, 255, 0.45);
+    font-size: 14pt;
+}

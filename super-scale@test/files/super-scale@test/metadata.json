@@ -1,7 +1,7 @@
 {
     "uuid": "super-scale@test",
     "name": "Super Scale",
-    "description": "Extends the scale view to show windows from all workspaces in a single view.",
-    "version": "1.0",
+    "description": "Replaces the built-in Scale view with a custom macOS Mission Control-inspired window overview. Shows all open windows from every workspace on each monitor in a clean tiled grid. Click or press Enter to activate; middle-click or Ctrl+W to close; Escape to dismiss.",
+    "version": "2.0",
     "cinnamon-version": ["6.0", "6.2", "6.4"]
 }
