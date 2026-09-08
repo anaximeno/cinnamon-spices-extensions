@@ -26,7 +26,7 @@ const GOLDEN_RATIO = 1.618033988749895;
 
 const BASE_DIALOG_WIDTH = 680;
 const BASE_ICON_SIZE = 28;
-const MAX_FREQUENT_APPS = 8;
+const MAX_FREQUENT_APPS = 3;
 const ROW_ANIMATION_STEP_MS = 12;
 const ROW_ANIMATION_MAX_DELAY_MS = 120;
 const ROW_ANIMATION_DURATION_MS = 140;
@@ -238,7 +238,7 @@ function formatMathResult(value) {
 
 class UsageTracker {
     constructor() {
-        this._path = GLib.build_filenamev([GLib.get_user_cache_dir(), UUID, "usage.json"]);
+        this._path = GLib.build_filenamev([GLib.get_user_data_dir(), UUID, "usage.json"]);
         this._data = this._load();
     }
 
@@ -469,6 +469,7 @@ class LauncherDialog extends ModalDialog.ModalDialog {
         this._visibleRows = [];
         this._selectedIndex = -1;
         this._filterTimeoutId = 0;
+        this._showFrequentApps = true;
 
         // Building rows touches theme-node/size negotiation, which St only
         // resolves correctly once this dialog is mapped - so the very first
@@ -487,6 +488,10 @@ class LauncherDialog extends ModalDialog.ModalDialog {
     // Bound to the "open-launcher" setting by extension.js; kept here only
     // so callers have a stable place to look for the current accelerator.
     open_launcher() {}
+
+    setShowFrequentApps(value) {
+        this._showFrequentApps = value;
+    }
 
     toggle() {
         if (this.state === ModalDialog.State.OPENED || this.state === ModalDialog.State.OPENING) {
@@ -508,17 +513,21 @@ class LauncherDialog extends ModalDialog.ModalDialog {
         });
 
         if (this._appsDirty) {
-            this._refreshApps();
+            this._rebuildAppEntries();
             this._appsDirty = false;
         }
+
         this._searchEntry.set_text("");
+        this._cancelPendingFilter();
+        this._applyFilter("", true);
+
+        let adjustment = this._scrollView.vscroll ? this._scrollView.vscroll.adjustment : null;
+        if (adjustment)
+            adjustment.value = 0;
     }
 
     close(timestamp) {
-        if (this._filterTimeoutId) {
-            GLib.source_remove(this._filterTimeoutId);
-            this._filterTimeoutId = 0;
-        }
+        this._cancelPendingFilter();
         this.dialogLayout.ease({
             scale_x: 0.97,
             scale_y: 0.97,
@@ -598,15 +607,13 @@ class LauncherDialog extends ModalDialog.ModalDialog {
         return new St.Label({ text: title, style_class: "cinnabon-launcher-section-header" });
     }
 
-    _refreshApps() {
+    _rebuildAppEntries() {
         this._appEntries.forEach(entry => entry.destroy());
 
         let apps = this._appSystem.get_all().filter(app => !app.get_nodisplay());
         apps.sort((a, b) => a.get_name().localeCompare(b.get_name()));
 
         this._appEntries = apps.map(app => this._makeAppEntry(app));
-
-        this._applyFilter(this._searchEntry.get_text(), true);
     }
 
     _onSearchChanged() {
@@ -625,13 +632,19 @@ class LauncherDialog extends ModalDialog.ModalDialog {
         });
     }
 
+    _cancelPendingFilter() {
+        if (this._filterTimeoutId) {
+            GLib.source_remove(this._filterTimeoutId);
+            this._filterTimeoutId = 0;
+        }
+    }
+
     // Applies any debounced filter immediately, so Return/Up/Down always act
     // on the current text instead of whatever was last rendered.
     _flushPendingFilter() {
         if (!this._filterTimeoutId)
             return;
-        GLib.source_remove(this._filterTimeoutId);
-        this._filterTimeoutId = 0;
+        this._cancelPendingFilter();
         this._applyFilter(this._searchEntry.get_text());
     }
 
@@ -662,12 +675,14 @@ class LauncherDialog extends ModalDialog.ModalDialog {
             this._appEntries.forEach(entry => entry.setTitleHighlight(null));
             this._actionEntries.forEach(entry => entry.setTitleHighlight(null));
 
-            let frequent = this._appEntries
-                .map(entry => ({ entry, score: this._usage.score(entry.app.get_id()) }))
-                .filter(x => x.score > 0)
-                .sort((a, b) => b.score - a.score)
-                .slice(0, MAX_FREQUENT_APPS)
-                .map(x => x.entry);
+            let frequent = this._showFrequentApps
+                ? this._appEntries
+                    .map(entry => ({ entry, score: this._usage.score(entry.app.get_id()) }))
+                    .filter(x => x.score > 0)
+                    .sort((a, b) => b.score - a.score)
+                    .slice(0, MAX_FREQUENT_APPS)
+                    .map(x => x.entry)
+                : [];
             let frequentSet = new Set(frequent);
             let rest = this._appEntries.filter(entry => !frequentSet.has(entry));
 
@@ -808,8 +823,7 @@ class LauncherDialog extends ModalDialog.ModalDialog {
     }
 
     destroy() {
-        if (this._filterTimeoutId)
-            GLib.source_remove(this._filterTimeoutId);
+        this._cancelPendingFilter();
         if (this._searchIconClickedId)
             this._searchEntry.disconnect(this._searchIconClickedId);
         this._appSystem.disconnect(this._installedChangedId);

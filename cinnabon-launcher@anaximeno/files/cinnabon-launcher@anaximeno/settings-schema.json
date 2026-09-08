@@ -1,7 +1,12 @@
 {
     "open-launcher": {
         "type": "keybinding",
-        "default": "<Super>space",
+        "default": "<Control>Super_L::<Control>space",
         "description": "Open Cinnabon App Launcher"
+    },
+    "show-frequent-apps": {
+        "type": "switch",
+        "default": true,
+        "description": "Show frequently used applications when the launcher opens"
     }
 }
