@@ -38,8 +38,7 @@ function normalize(text) {
     return text.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 }
 
-// Cinnamon scales explicit JS pixel sizes via global.ui_scale; CSS-driven
-// sizes scale automatically, these don't.
+// global.ui_scale scales explicit JS pixel sizes; CSS-driven sizes already scale automatically.
 function computeMetrics() {
     let scale = global.ui_scale || 1;
     let monitor = Main.layoutManager.primaryMonitor;
@@ -56,8 +55,7 @@ function computeMetrics() {
     return { scale, width, iconSize, heroIconSize, listMaxHeight };
 }
 
-// fzf-style subsequence scoring: rewards consecutive runs and word-start
-// matches. Returns null when query isn't a subsequence of text.
+// fzf-style subsequence scoring (rewards runs and word-starts); null if not a subsequence.
 function fuzzyMatch(query, text) {
     if (query.length === 0)
         return { score: 0, matches: [] };
@@ -111,8 +109,7 @@ function buildHighlightMarkup(title, matches) {
     return out;
 }
 
-// entry needs .nameNorm and .searchText (a broader haystack for recall
-// even when the name itself doesn't fuzzy-match).
+// entry needs .nameNorm/.searchText - the latter a broader haystack for recall beyond name matches.
 function matchEntry(query, entry, nameBonus) {
     let m = fuzzyMatch(query, entry.nameNorm);
     if (m)
@@ -123,7 +120,7 @@ function matchEntry(query, entry, nameBonus) {
 }
 
 // Same {score, matches} contract as matchEntry, but plain substring matching
-// ranked by match position - like the Cinnamon Menu applet's own search.
+// ranked by position - like the Cinnamon Menu applet's own search.
 function simpleMatchEntry(query, entry, nameBonus) {
     let idx = entry.nameNorm.indexOf(query);
     if (idx !== -1) {
@@ -295,8 +292,7 @@ class UsageTracker {
     }
 }
 
-// Matches the Cinnamon menu applet's own system buttons: instant, no
-// confirmation dialog (see menu@cinnamon.org/applet.js).
+// Matches the Cinnamon menu applet's own system buttons: instant, no confirmation dialog.
 function buildSystemActions() {
     let session = null;
     function getSession() {
@@ -346,9 +342,7 @@ function wireRowInteractions(actor, row) {
     });
 }
 
-// Shared shape for apps, system actions and the calculator "answer" row.
-// Persistent rows (apps/actions) live for the dialog's lifetime; only their
-// title markup is refreshed on re-filter, not the actor tree.
+// Persistent per app/action; re-filtering only updates title markup, not the actor tree.
 class ResultRow {
     constructor(opts) {
         this.kind = opts.kind;
@@ -508,9 +502,6 @@ class LauncherDialog extends ModalDialog.ModalDialog {
         this._updateOpenAndCloseTime();
     }
 
-    // Binds each setting straight onto `this` (e.g. this.show_frequent_apps) via a
-    // live get/set accessor - so the rest of the class just reads the current value
-    // directly, with no separate settings object or manual forwarding to keep in sync.
     _setupSettings(uuid) {
         this.settings = new Settings.ExtensionSettings(this, uuid);
 
@@ -541,9 +532,8 @@ class LauncherDialog extends ModalDialog.ModalDialog {
         this._actionEntries.forEach(entry => entry.setSubtitleVisible(this.show_descriptions));
     }
 
-    // The base ModalDialog fades in/out over openAndCloseTime already (see
-    // baseDialog.js); this ties that same knob to our own animations toggle
-    // as well as Cinnamon's system-wide "desktop-effects-workspace" setting.
+    // Ties the base ModalDialog's own fade duration (baseDialog.js) to our animations
+    // toggle and to Cinnamon's system-wide "desktop-effects-workspace" setting.
     _updateOpenAndCloseTime() {
         let systemEffectsEnabled = global.settings.get_boolean("desktop-effects-workspace");
         this.openAndCloseTime = (this.enable_animations && systemEffectsEnabled) ? 100 : 0;
@@ -697,8 +687,6 @@ class LauncherDialog extends ModalDialog.ModalDialog {
         let hasText = this._searchEntry.get_text().length > 0;
         this._searchEntry.set_secondary_icon(hasText ? this._searchActiveIcon : this._searchInactiveIcon);
 
-        // Rebuilding the list and re-scoring every entry on literally every
-        // keystroke is what made typing feel laggy; debounce it instead.
         if (this._filterTimeoutId)
             GLib.source_remove(this._filterTimeoutId);
 
@@ -716,8 +704,7 @@ class LauncherDialog extends ModalDialog.ModalDialog {
         }
     }
 
-    // Applies any debounced filter immediately, so Return/Up/Down always act
-    // on the current text instead of whatever was last rendered.
+    // Applies a pending debounced filter immediately, so Return/Up/Down act on the latest text.
     _flushPendingFilter() {
         if (!this._filterTimeoutId)
             return;
