@@ -39,8 +39,9 @@ function normalize(text) {
 }
 
 // global.ui_scale scales explicit JS pixel sizes; CSS-driven sizes already scale automatically.
-function computeMetrics() {
-    let scale = global.ui_scale || 1;
+// scalePercent is the user-configurable "launcher-scale" setting (Small/Medium/Large).
+function computeMetrics(scalePercent) {
+    let scale = (global.ui_scale || 1) * ((scalePercent || 100) / 100);
     let monitor = Main.layoutManager.primaryMonitor;
     let monitorWidth = monitor ? monitor.width : 1280;
 
@@ -49,10 +50,9 @@ function computeMetrics() {
     width = Math.min(width, Math.round(monitorWidth * 0.92));
 
     let iconSize = Math.round(BASE_ICON_SIZE * scale);
-    let heroIconSize = Math.round(iconSize * GOLDEN_RATIO);
     let listMaxHeight = Math.round(width / GOLDEN_RATIO);
 
-    return { scale, width, iconSize, heroIconSize, listMaxHeight };
+    return { width, iconSize, listMaxHeight };
 }
 
 // fzf-style subsequence scoring (rewards runs and word-starts); null if not a subsequence.
@@ -420,7 +420,10 @@ class ResultRow {
     }
 }
 
-var LauncherDialog = GObject.registerClass(
+var LauncherDialog = GObject.registerClass({
+    // Random suffix: GObject.registerClass throws if reloaded under the same GType name.
+    GTypeName: `LauncherDialog_${Date.now()}_${Math.floor(Math.random() * 100000)}`,
+},
 class LauncherDialog extends ModalDialog.ModalDialog {
     _init(uuid) {
         super._init({
@@ -430,7 +433,10 @@ class LauncherDialog extends ModalDialog.ModalDialog {
 
         this.buttonLayout.hide();
 
-        this._metrics = computeMetrics();
+        this._uuid = uuid;
+        this._setupSettings(uuid);
+
+        this._metrics = computeMetrics(this.launcher_scale);
         this._usage = new UsageTracker();
 
         this._searchEntry = new St.Entry({
@@ -441,19 +447,24 @@ class LauncherDialog extends ModalDialog.ModalDialog {
         });
         CinnamonEntry.addContextMenu(this._searchEntry);
 
-        this._searchInactiveIcon = new St.Icon({
-            style_class: "cinnabon-launcher-search-icon",
-            icon_name: "edit-find-symbolic",
-            icon_size: 16,
-        });
-        this._searchActiveIcon = new St.Icon({
+        this._searchClearIcon = new St.Icon({
             style_class: "cinnabon-launcher-search-icon",
             icon_name: "edit-clear-symbolic",
             icon_size: 16,
         });
-        this._searchEntry.set_secondary_icon(this._searchInactiveIcon);
+        this._searchSettingsIcon = new St.Icon({
+            style_class: "cinnabon-launcher-search-icon",
+            icon_name: "preferences-system-symbolic",
+            icon_size: 16,
+        });
+        this._searchEntry.set_secondary_icon(this._searchSettingsIcon);
         this._searchIconClickedId = this._searchEntry.connect("secondary-icon-clicked", () => {
-            this._searchEntry.set_text("");
+            if (this._searchEntry.get_text().length > 0) {
+                this._searchEntry.set_text("");
+            } else {
+                Util.spawnCommandLineAsync(`xlet-settings extension ${this._uuid}`);
+                this.close();
+            }
         });
 
         this.contentLayout.add_child(this._searchEntry);
@@ -477,8 +488,6 @@ class LauncherDialog extends ModalDialog.ModalDialog {
 
         this._searchEntry.clutter_text.connect("text-changed", this._onSearchChanged.bind(this));
         this._searchEntry.clutter_text.connect("key-press-event", this._onKeyPress.bind(this));
-
-        this._setupSettings(uuid);
 
         this._appEntries = [];
         this._actionEntries = buildSystemActions().map(action => this._makeActionEntry(action));
@@ -514,6 +523,7 @@ class LauncherDialog extends ModalDialog.ModalDialog {
             ["max-frequent-apps", "max_frequent_apps", null],
             ["show-descriptions", "show_descriptions", () => this._updateSubtitleVisibility()],
             ["enable-animations", "enable_animations", () => this._updateOpenAndCloseTime()],
+            ["launcher-scale", "launcher_scale", () => this._applyMetrics()],
         ];
         bindings.forEach(([key, prop, cb]) => this.settings.bind(key, prop, cb));
     }
@@ -537,6 +547,18 @@ class LauncherDialog extends ModalDialog.ModalDialog {
     _updateOpenAndCloseTime() {
         let systemEffectsEnabled = global.settings.get_boolean("desktop-effects-workspace");
         this.openAndCloseTime = (this.enable_animations && systemEffectsEnabled) ? 100 : 0;
+    }
+
+    // Action rows bake in an icon size, so rebuild now; app rows refresh lazily via _appsDirty.
+    _applyMetrics() {
+        this._metrics = computeMetrics(this.launcher_scale);
+        this._searchEntry.width = this._metrics.width;
+        this._scrollView.width = this._metrics.width;
+        this._scrollView.height = this._metrics.listMaxHeight;
+
+        this._actionEntries.forEach(entry => entry.destroy());
+        this._actionEntries = buildSystemActions().map(action => this._makeActionEntry(action));
+        this._appsDirty = true;
     }
 
     _easeActor(actor, easeOptions) {
@@ -659,9 +681,9 @@ class LauncherDialog extends ModalDialog.ModalDialog {
             kind: "calculator",
             name: resultText,
             hero: true,
-            subtitle: `${rawQuery.trim()} = ${resultText}  ·  ${_("Enter to copy")}`,
+            subtitle: rawQuery.trim(),
             width: this._metrics.width,
-            iconSize: this._metrics.heroIconSize,
+            iconSize: this._metrics.iconSize,
             iconName: "accessories-calculator-symbolic",
             onActivate: () => {
                 St.Clipboard.get_default().set_text(St.ClipboardType.CLIPBOARD, resultText);
@@ -685,7 +707,7 @@ class LauncherDialog extends ModalDialog.ModalDialog {
 
     _onSearchChanged() {
         let hasText = this._searchEntry.get_text().length > 0;
-        this._searchEntry.set_secondary_icon(hasText ? this._searchActiveIcon : this._searchInactiveIcon);
+        this._searchEntry.set_secondary_icon(hasText ? this._searchClearIcon : this._searchSettingsIcon);
 
         if (this._filterTimeoutId)
             GLib.source_remove(this._filterTimeoutId);
@@ -704,7 +726,7 @@ class LauncherDialog extends ModalDialog.ModalDialog {
         }
     }
 
-    // Applies a pending debounced filter immediately, so Return/Up/Down act on the latest text.
+    // So Return/Up/Down act on the latest text, not a stale debounced render.
     _flushPendingFilter() {
         if (!this._filterTimeoutId)
             return;
@@ -854,6 +876,12 @@ class LauncherDialog extends ModalDialog.ModalDialog {
         let symbol = event.get_key_symbol();
 
         if (symbol === Clutter.KEY_Escape) {
+            this.close();
+            return Clutter.EVENT_STOP;
+        }
+
+        // Our modal grab would otherwise swallow a bare Super tap meant for the main menu.
+        if (symbol === Clutter.KEY_Super_L || symbol === Clutter.KEY_Super_R) {
             this.close();
             return Clutter.EVENT_STOP;
         }

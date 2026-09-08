@@ -13,7 +13,7 @@
         "general-section": {
             "type": "section",
             "title": "General",
-            "keys": ["open-launcher", "enable-animations"]
+            "keys": ["launcher-scale", "open-launcher", "enable-animations"]
         },
         "search-section": {
             "type": "section",
@@ -78,5 +78,17 @@
         "type": "switch",
         "default": false,
         "description": "Enable animations"
+    },
+
+    "launcher-scale": {
+        "type": "combobox",
+        "default": 80,
+        "description": "Launcher size",
+        "tooltip": "Overall size of the launcher window, independent of display scaling.",
+        "options": {
+            "Small": 60,
+            "Medium": 80,
+            "Large": 100
+        }
     }
 }

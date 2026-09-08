@@ -1,7 +1,7 @@
 var UUID = "cinnabon-launcher@anaximeno";
 var HOTKEY_ID = "cinnabon-launcher-open";
 
-// Used for the results-viewport aspect ratio and the calculator's hero icon size.
+// Used for the results-viewport aspect ratio.
 var GOLDEN_RATIO = 1.618033988749895;
 
 var BASE_DIALOG_WIDTH = 680;
