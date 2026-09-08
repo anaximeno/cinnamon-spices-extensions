@@ -270,7 +270,7 @@ class UsageTracker {
             GLib.mkdir_with_parents(GLib.path_get_dirname(this._path), 0o755);
             GLib.file_set_contents(this._path, JSON.stringify(this._data));
         } catch (e) {
-            log(`cinnabon-launcher: failed to persist usage data: ${e}`);
+            log(`cinnamon-launcher: failed to persist usage data: ${e}`);
         }
     }
 
@@ -353,7 +353,7 @@ class ResultRow {
         this._highlighted = false;
 
         this.actor = new St.BoxLayout({
-            style_class: "cinnabon-launcher-row" + (opts.hero ? " cinnabon-launcher-row-hero" : ""),
+            style_class: "cinnamon-launcher-row" + (opts.hero ? " cinnamon-launcher-row-hero" : ""),
             reactive: true,
             track_hover: true,
             width: opts.width,
@@ -370,13 +370,13 @@ class ResultRow {
 
         let textBox = new St.BoxLayout({ vertical: true, x_expand: true, y_align: Clutter.ActorAlign.CENTER });
 
-        this.titleLabel = new St.Label({ text: this.name, style_class: "cinnabon-launcher-row-label" });
+        this.titleLabel = new St.Label({ text: this.name, style_class: "cinnamon-launcher-row-label" });
         this.titleLabel.clutter_text.ellipsize = Pango.EllipsizeMode.END;
         this.titleLabel.clutter_text.line_wrap = false;
         textBox.add_child(this.titleLabel);
 
         if (opts.subtitle) {
-            this.subtitleLabel = new St.Label({ text: opts.subtitle, style_class: "cinnabon-launcher-row-subtitle" });
+            this.subtitleLabel = new St.Label({ text: opts.subtitle, style_class: "cinnamon-launcher-row-subtitle" });
             this.subtitleLabel.clutter_text.ellipsize = Pango.EllipsizeMode.END;
             this.subtitleLabel.visible = opts.subtitleVisible !== false;
             textBox.add_child(this.subtitleLabel);
@@ -427,7 +427,7 @@ var LauncherDialog = GObject.registerClass({
 class LauncherDialog extends ModalDialog.ModalDialog {
     _init(uuid) {
         super._init({
-            styleClass: "cinnabon-launcher-dialog",
+            styleClass: "cinnamon-launcher-dialog",
             destroyOnClose: false,
         });
 
@@ -440,7 +440,7 @@ class LauncherDialog extends ModalDialog.ModalDialog {
         this._usage = new UsageTracker();
 
         this._searchEntry = new St.Entry({
-            style_class: "cinnabon-launcher-search",
+            style_class: "cinnamon-launcher-search",
             hint_text: _("Search apps, actions, or type a sum…"),
             can_focus: true,
             width: this._metrics.width,
@@ -448,12 +448,12 @@ class LauncherDialog extends ModalDialog.ModalDialog {
         CinnamonEntry.addContextMenu(this._searchEntry);
 
         this._searchClearIcon = new St.Icon({
-            style_class: "cinnabon-launcher-search-icon",
+            style_class: "cinnamon-launcher-search-icon",
             icon_name: "edit-clear-symbolic",
             icon_size: 16,
         });
         this._searchSettingsIcon = new St.Icon({
-            style_class: "cinnabon-launcher-search-icon",
+            style_class: "cinnamon-launcher-search-icon",
             icon_name: "preferences-system-symbolic",
             icon_size: 16,
         });
@@ -470,7 +470,7 @@ class LauncherDialog extends ModalDialog.ModalDialog {
         this.contentLayout.add_child(this._searchEntry);
 
         this._scrollView = new St.ScrollView({
-            style_class: "cinnabon-launcher-scrollview",
+            style_class: "cinnamon-launcher-scrollview",
             hscrollbar_policy: St.PolicyType.NEVER,
             vscrollbar_policy: St.PolicyType.AUTOMATIC,
             clip_to_allocation: true,
@@ -478,7 +478,7 @@ class LauncherDialog extends ModalDialog.ModalDialog {
             height: this._metrics.listMaxHeight,
         });
         this._list = new St.BoxLayout({
-            style_class: "cinnabon-launcher-list",
+            style_class: "cinnamon-launcher-list",
             vertical: true,
         });
         this._scrollView.add_actor(this._list);
@@ -693,7 +693,7 @@ class LauncherDialog extends ModalDialog.ModalDialog {
     }
 
     _makeSectionHeader(title) {
-        return new St.Label({ text: title, style_class: "cinnabon-launcher-section-header" });
+        return new St.Label({ text: title, style_class: "cinnamon-launcher-section-header" });
     }
 
     _rebuildAppEntries() {

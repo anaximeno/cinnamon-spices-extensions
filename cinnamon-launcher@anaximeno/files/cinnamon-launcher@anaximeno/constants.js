@@ -1,5 +1,5 @@
-var UUID = "cinnabon-launcher@anaximeno";
-var HOTKEY_ID = "cinnabon-launcher-open";
+var UUID = "cinnamon-launcher@anaximeno";
+var HOTKEY_ID = "cinnamon-launcher-open";
 
 // Used for the results-viewport aspect ratio.
 var GOLDEN_RATIO = 1.618033988749895;

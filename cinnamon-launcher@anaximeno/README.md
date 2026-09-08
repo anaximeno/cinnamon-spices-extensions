@@ -1,7 +1,7 @@
-# Cinnabon App Launcher
+# Cinnamon App Launcher
 
-A centered, search-first application launcher for Cinnamon — press `Super+Space`
-and start typing.
+A centered, search-first application launcher for Cinnamon — press `Ctrl+Super`
+or `Super+M` and start typing.
 
 ![screenshot](screenshot.png)
 
