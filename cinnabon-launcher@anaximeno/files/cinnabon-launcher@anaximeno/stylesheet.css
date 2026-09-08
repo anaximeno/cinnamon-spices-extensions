@@ -1,0 +1,29 @@
+.cinnabon-launcher-dialog {
+    padding: 1.2em;
+}
+
+.cinnabon-launcher-search {
+    font-size: 1.3em;
+    padding: 0.5em 0.8em;
+    margin-bottom: 1em;
+    border-radius: 8px;
+}
+
+.cinnabon-launcher-search-icon {
+    padding: 0 0.4em;
+}
+
+.cinnabon-launcher-row {
+    padding: 0.5em 0.7em;
+    border-radius: 6px;
+    spacing: 0.7em;
+}
+
+.cinnabon-launcher-row:hover,
+.cinnabon-launcher-row:selected {
+    background-color: rgba(128, 128, 128, 0.25);
+}
+
+.cinnabon-launcher-row-label {
+    font-size: 1em;
+}

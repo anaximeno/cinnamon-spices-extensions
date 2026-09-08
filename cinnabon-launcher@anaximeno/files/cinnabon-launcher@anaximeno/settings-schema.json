@@ -1,0 +1,7 @@
+{
+    "open-launcher": {
+        "type": "keybinding",
+        "default": "<Super>space",
+        "description": "Open Cinnabon App Launcher"
+    }
+}
