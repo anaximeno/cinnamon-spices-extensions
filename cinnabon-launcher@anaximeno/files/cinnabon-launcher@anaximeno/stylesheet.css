@@ -27,3 +27,25 @@
 .cinnabon-launcher-row-label {
     font-size: 1em;
 }
+
+.cinnabon-launcher-row-subtitle {
+    font-size: 0.82em;
+    opacity: 0.6;
+}
+
+.cinnabon-launcher-row-hero {
+    padding: 0.7em;
+}
+
+.cinnabon-launcher-row-hero .cinnabon-launcher-row-label {
+    font-size: 1.3em;
+    font-weight: bold;
+}
+
+.cinnabon-launcher-section-header {
+    font-size: 0.78em;
+    font-weight: bold;
+    text-transform: uppercase;
+    opacity: 0.5;
+    padding: 0.7em 0.7em 0.3em 0.7em;
+}
