@@ -32,7 +32,7 @@
     "open-launcher": {
         "type": "keybinding",
         "default": "<Control>Super_L::<Super>m",
-        "description": "Open Cinnamon App Launcher"
+        "description": "Open launcher keybinding"
     },
 
     "fuzzy-search": {
