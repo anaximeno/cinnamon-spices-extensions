@@ -17,7 +17,6 @@ const Util = imports.misc.util;
 const {
     UUID,
     HOTKEY_ID,
-    GOLDEN_RATIO,
     BASE_DIALOG_WIDTH,
     BASE_ICON_SIZE,
     SEARCH_DEBOUNCE_MS,
@@ -50,7 +49,7 @@ function computeMetrics(scalePercent) {
     width = Math.min(width, Math.round(monitorWidth * 0.92));
 
     let iconSize = Math.round(BASE_ICON_SIZE * scale);
-    let listMaxHeight = Math.round(width / GOLDEN_RATIO);
+    let listMaxHeight = Math.round(width / 1.618);
 
     return { width, iconSize, listMaxHeight };
 }
