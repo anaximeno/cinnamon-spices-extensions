@@ -10,27 +10,27 @@ const ByteArray = imports.byteArray;
 const ModalDialog = imports.ui.modalDialog;
 const CinnamonEntry = imports.ui.cinnamonEntry;
 const Main = imports.ui.main;
+const Settings = imports.ui.settings;
 const GnomeSession = imports.misc.gnomeSession;
 const Util = imports.misc.util;
 
-const UUID = "cinnabon-launcher@anaximeno";
+const {
+    UUID,
+    HOTKEY_ID,
+    GOLDEN_RATIO,
+    BASE_DIALOG_WIDTH,
+    BASE_ICON_SIZE,
+    SEARCH_DEBOUNCE_MS,
+    ROW_ANIMATION_STEP_MS,
+    ROW_ANIMATION_MAX_DELAY_MS,
+    ROW_ANIMATION_DURATION_MS,
+} = require('./constants.js');
 
 Gettext.bindtextdomain(UUID, GLib.get_home_dir() + "/.local/share/locale");
 
 function _(str) {
     return Gettext.dgettext(UUID, str);
 }
-
-// Used for the results-viewport aspect ratio and the calculator's hero icon size.
-const GOLDEN_RATIO = 1.618033988749895;
-
-const BASE_DIALOG_WIDTH = 680;
-const BASE_ICON_SIZE = 28;
-const MAX_FREQUENT_APPS = 3;
-const ROW_ANIMATION_STEP_MS = 12;
-const ROW_ANIMATION_MAX_DELAY_MS = 120;
-const ROW_ANIMATION_DURATION_MS = 140;
-const SEARCH_DEBOUNCE_MS = 90;
 
 function normalize(text) {
     if (!text)
@@ -117,6 +117,21 @@ function matchEntry(query, entry, nameBonus) {
     let m = fuzzyMatch(query, entry.nameNorm);
     if (m)
         return { score: m.score + nameBonus, matches: m.matches };
+    if (entry.searchText.includes(query))
+        return { score: -1, matches: [] };
+    return null;
+}
+
+// Same {score, matches} contract as matchEntry, but plain substring matching
+// ranked by match position - like the Cinnamon Menu applet's own search.
+function simpleMatchEntry(query, entry, nameBonus) {
+    let idx = entry.nameNorm.indexOf(query);
+    if (idx !== -1) {
+        let matches = [];
+        for (let i = 0; i < query.length; i++)
+            matches.push(idx + i);
+        return { score: nameBonus - idx, matches };
+    }
     if (entry.searchText.includes(query))
         return { score: -1, matches: [] };
     return null;
@@ -369,6 +384,7 @@ class ResultRow {
         if (opts.subtitle) {
             this.subtitleLabel = new St.Label({ text: opts.subtitle, style_class: "cinnabon-launcher-row-subtitle" });
             this.subtitleLabel.clutter_text.ellipsize = Pango.EllipsizeMode.END;
+            this.subtitleLabel.visible = opts.subtitleVisible !== false;
             textBox.add_child(this.subtitleLabel);
         }
 
@@ -396,6 +412,11 @@ class ResultRow {
             this.actor.remove_style_pseudo_class("selected");
     }
 
+    setSubtitleVisible(visible) {
+        if (this.subtitleLabel)
+            this.subtitleLabel.visible = visible;
+    }
+
     activate() {
         this._onActivate();
     }
@@ -407,7 +428,7 @@ class ResultRow {
 
 var LauncherDialog = GObject.registerClass(
 class LauncherDialog extends ModalDialog.ModalDialog {
-    _init() {
+    _init(uuid) {
         super._init({
             styleClass: "cinnabon-launcher-dialog",
             destroyOnClose: false,
@@ -463,13 +484,14 @@ class LauncherDialog extends ModalDialog.ModalDialog {
         this._searchEntry.clutter_text.connect("text-changed", this._onSearchChanged.bind(this));
         this._searchEntry.clutter_text.connect("key-press-event", this._onKeyPress.bind(this));
 
+        this._setupSettings(uuid);
+
         this._appEntries = [];
         this._actionEntries = buildSystemActions().map(action => this._makeActionEntry(action));
         this._calculatorRow = null;
         this._visibleRows = [];
         this._selectedIndex = -1;
         this._filterTimeoutId = 0;
-        this._showFrequentApps = true;
 
         // Building rows touches theme-node/size negotiation, which St only
         // resolves correctly once this dialog is mapped - so the very first
@@ -483,14 +505,65 @@ class LauncherDialog extends ModalDialog.ModalDialog {
         });
 
         this.dialogLayout.set_pivot_point(0.5, 0.5);
+        this._updateOpenAndCloseTime();
     }
 
-    // Bound to the "open-launcher" setting by extension.js; kept here only
-    // so callers have a stable place to look for the current accelerator.
-    open_launcher() {}
+    // Binds each setting straight onto `this` (e.g. this.show_frequent_apps) via a
+    // live get/set accessor - so the rest of the class just reads the current value
+    // directly, with no separate settings object or manual forwarding to keep in sync.
+    _setupSettings(uuid) {
+        this.settings = new Settings.ExtensionSettings(this, uuid);
 
-    setShowFrequentApps(value) {
-        this._showFrequentApps = value;
+        let bindings = [
+            ["open-launcher", "open_launcher", () => this._setKeybinding()],
+            ["fuzzy-search", "fuzzy_search", null],
+            ["enable-calculator", "enable_calculator", null],
+            ["enable-system-actions", "enable_system_actions", null],
+            ["show-frequent-apps", "show_frequent_apps", null],
+            ["max-frequent-apps", "max_frequent_apps", null],
+            ["show-descriptions", "show_descriptions", () => this._updateSubtitleVisibility()],
+            ["enable-animations", "enable_animations", () => this._updateOpenAndCloseTime()],
+        ];
+        bindings.forEach(([key, prop, cb]) => this.settings.bind(key, prop, cb));
+    }
+
+    enable() {
+        this._setKeybinding();
+    }
+
+    _setKeybinding() {
+        Main.keybindingManager.removeHotKey(HOTKEY_ID);
+        Main.keybindingManager.addHotKey(HOTKEY_ID, this.open_launcher, () => this.toggle());
+    }
+
+    _updateSubtitleVisibility() {
+        this._appEntries.forEach(entry => entry.setSubtitleVisible(this.show_descriptions));
+        this._actionEntries.forEach(entry => entry.setSubtitleVisible(this.show_descriptions));
+    }
+
+    // The base ModalDialog fades in/out over openAndCloseTime already (see
+    // baseDialog.js); this ties that same knob to our own animations toggle
+    // as well as Cinnamon's system-wide "desktop-effects-workspace" setting.
+    _updateOpenAndCloseTime() {
+        let systemEffectsEnabled = global.settings.get_boolean("desktop-effects-workspace");
+        this.openAndCloseTime = (this.enable_animations && systemEffectsEnabled) ? 100 : 0;
+    }
+
+    _easeActor(actor, easeOptions) {
+        if (this.enable_animations) {
+            actor.ease(easeOptions);
+            return;
+        }
+        if (easeOptions.scale_x !== undefined)
+            actor.scale_x = easeOptions.scale_x;
+        if (easeOptions.scale_y !== undefined)
+            actor.scale_y = easeOptions.scale_y;
+        if (easeOptions.opacity !== undefined)
+            actor.opacity = easeOptions.opacity;
+        if (easeOptions.translation_y !== undefined)
+            actor.translation_y = easeOptions.translation_y;
+        if (easeOptions.onComplete)
+            easeOptions.onComplete();
     }
 
     toggle() {
@@ -499,13 +572,15 @@ class LauncherDialog extends ModalDialog.ModalDialog {
             return;
         }
 
-        this.dialogLayout.scale_x = 0.96;
-        this.dialogLayout.scale_y = 0.96;
+        if (this.enable_animations) {
+            this.dialogLayout.scale_x = 0.96;
+            this.dialogLayout.scale_y = 0.96;
+        }
 
         if (!this.open(global.get_current_time()))
             return;
 
-        this.dialogLayout.ease({
+        this._easeActor(this.dialogLayout, {
             scale_x: 1,
             scale_y: 1,
             duration: 160,
@@ -528,7 +603,7 @@ class LauncherDialog extends ModalDialog.ModalDialog {
 
     close(timestamp) {
         this._cancelPendingFilter();
-        this.dialogLayout.ease({
+        this._easeActor(this.dialogLayout, {
             scale_x: 0.97,
             scale_y: 0.97,
             duration: 120,
@@ -549,6 +624,7 @@ class LauncherDialog extends ModalDialog.ModalDialog {
             name,
             searchText,
             subtitle,
+            subtitleVisible: this.show_descriptions,
             width: this._metrics.width,
             iconSize: this._metrics.iconSize,
             iconTexture: app.create_icon_texture(this._metrics.iconSize),
@@ -568,6 +644,7 @@ class LauncherDialog extends ModalDialog.ModalDialog {
             name: action.name,
             searchText: action.keywords,
             subtitle: _("System Action"),
+            subtitleVisible: this.show_descriptions,
             width: this._metrics.width,
             iconSize: this._metrics.iconSize,
             iconName: action.iconName,
@@ -651,7 +728,7 @@ class LauncherDialog extends ModalDialog.ModalDialog {
     _animateRowIn(actor, index) {
         actor.opacity = 0;
         actor.translation_y = 6;
-        actor.ease({
+        this._easeActor(actor, {
             opacity: 255,
             translation_y: 0,
             delay: Math.min(index * ROW_ANIMATION_STEP_MS, ROW_ANIMATION_MAX_DELAY_MS),
@@ -675,12 +752,12 @@ class LauncherDialog extends ModalDialog.ModalDialog {
             this._appEntries.forEach(entry => entry.setTitleHighlight(null));
             this._actionEntries.forEach(entry => entry.setTitleHighlight(null));
 
-            let frequent = this._showFrequentApps
+            let frequent = this.show_frequent_apps
                 ? this._appEntries
                     .map(entry => ({ entry, score: this._usage.score(entry.app.get_id()) }))
                     .filter(x => x.score > 0)
                     .sort((a, b) => b.score - a.score)
-                    .slice(0, MAX_FREQUENT_APPS)
+                    .slice(0, this.max_frequent_apps)
                     .map(x => x.entry)
                 : [];
             let frequentSet = new Set(frequent);
@@ -695,9 +772,11 @@ class LauncherDialog extends ModalDialog.ModalDialog {
                 this._appEntries.forEach(entry => ordered.push({ row: entry }));
             }
         } else {
+            let matchFn = this.fuzzy_search ? matchEntry : simpleMatchEntry;
+
             let appMatches = [];
             for (let entry of this._appEntries) {
-                let m = matchEntry(query, entry, 1000);
+                let m = matchFn(query, entry, 1000);
                 if (m)
                     appMatches.push({ entry, m });
             }
@@ -709,19 +788,21 @@ class LauncherDialog extends ModalDialog.ModalDialog {
             unmatchedApps.forEach(entry => entry.setTitleHighlight(null));
 
             let actionMatches = [];
-            for (let entry of this._actionEntries) {
-                let m = matchEntry(query, entry, 500);
-                if (m)
-                    actionMatches.push({ entry, m });
+            if (this.enable_system_actions) {
+                for (let entry of this._actionEntries) {
+                    let m = matchFn(query, entry, 500);
+                    if (m)
+                        actionMatches.push({ entry, m });
+                }
+                actionMatches.sort((a, b) => b.m.score - a.m.score);
             }
-            actionMatches.sort((a, b) => b.m.score - a.m.score);
             actionMatches.forEach(({ entry, m }) => entry.setTitleHighlight(m.matches));
 
             let unmatchedActions = new Set(this._actionEntries);
             actionMatches.forEach(({ entry }) => unmatchedActions.delete(entry));
             unmatchedActions.forEach(entry => entry.setTitleHighlight(null));
 
-            this._calculatorRow = this._makeCalculatorRow(rawQuery);
+            this._calculatorRow = this.enable_calculator ? this._makeCalculatorRow(rawQuery) : null;
             if (this._calculatorRow)
                 ordered.push({ row: this._calculatorRow });
 
@@ -823,6 +904,8 @@ class LauncherDialog extends ModalDialog.ModalDialog {
     }
 
     destroy() {
+        Main.keybindingManager.removeHotKey(HOTKEY_ID);
+        this.settings.finalize();
         this._cancelPendingFilter();
         if (this._searchIconClickedId)
             this._searchEntry.disconnect(this._searchIconClickedId);
