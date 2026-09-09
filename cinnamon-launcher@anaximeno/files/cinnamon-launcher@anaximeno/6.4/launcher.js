@@ -335,8 +335,10 @@ function buildSystemActions() {
 }
 
 function wireRowInteractions(actor, row) {
-    actor.connect("enter-event", () => actor.add_style_pseudo_class("hover"));
-    actor.connect("leave-event", () => actor.remove_style_pseudo_class("hover"));
+    actor.connect("notify::hover", () => {
+        if (actor.hover)
+            row.hoverEnter();
+    });
     actor.connect("button-release-event", () => {
         row.activate();
         return Clutter.EVENT_STOP;
@@ -353,6 +355,7 @@ class ResultRow {
         this.searchText = opts.searchText || this.nameNorm;
         this._opts = opts;
         this._onActivate = opts.onActivate;
+        this._onHoverEnter = opts.onHoverEnter || (() => {});
 
         this.actor = null;
         this.titleLabel = null;
@@ -452,6 +455,10 @@ class ResultRow {
 
     activate() {
         this._onActivate();
+    }
+
+    hoverEnter() {
+        this._onHoverEnter();
     }
 
     destroy() {
@@ -690,6 +697,7 @@ class LauncherDialog extends ModalDialog.ModalDialog {
                 app.open_new_window(-1);
                 this.close();
             },
+            onHoverEnter: () => this._selectRow(row),
         });
         row.app = app;
         return row;
@@ -709,6 +717,7 @@ class LauncherDialog extends ModalDialog.ModalDialog {
                 action.run();
                 this.close();
             },
+            onHoverEnter: () => this._selectRow(row),
         });
     }
 
@@ -734,6 +743,7 @@ class LauncherDialog extends ModalDialog.ModalDialog {
                 St.Clipboard.get_default().set_text(St.ClipboardType.CLIPBOARD, resultText);
                 this.close();
             },
+            onHoverEnter: () => this._selectRow(row),
         });
     }
 
@@ -926,6 +936,14 @@ class LauncherDialog extends ModalDialog.ModalDialog {
             GLib.source_remove(this._fillIdleId);
             this._fillIdleId = 0;
         }
+    }
+
+    _selectRow(row) {
+        let index = this._visibleRows.indexOf(row);
+        if (index === -1 || index === this._selectedIndex)
+            return;
+        this._selectedIndex = index;
+        this._updateSelection();
     }
 
     _updateSelection() {

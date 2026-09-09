@@ -19,7 +19,6 @@
     spacing: 0.7em;
 }
 
-.cinnamon-launcher-row:hover,
 .cinnamon-launcher-row:selected {
     background-color: rgba(128, 128, 128, 0.25);
 }
