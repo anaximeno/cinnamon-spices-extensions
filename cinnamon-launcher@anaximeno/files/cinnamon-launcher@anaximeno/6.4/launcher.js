@@ -3,6 +3,7 @@ const St = imports.gi.St;
 const GLib = imports.gi.GLib;
 const GObject = imports.gi.GObject;
 const Cinnamon = imports.gi.Cinnamon;
+const Gio = imports.gi.Gio;
 const Pango = imports.gi.Pango;
 const Gettext = imports.gettext;
 const ByteArray = imports.byteArray;
@@ -28,7 +29,7 @@ const {
     ROW_ANIMATION_DURATION_MS,
 } = require('./constants.js');
 
-Gettext.bindtextdomain(UUID, GLib.get_home_dir() + "/.local/share/locale");
+Gettext.bindtextdomain(UUID, GLib.get_user_data_dir() + "/locale");
 
 function _(str) {
     return Gettext.dgettext(UUID, str);
@@ -253,18 +254,21 @@ function formatMathResult(value) {
 class UsageTracker {
     constructor() {
         this._path = GLib.build_filenamev([GLib.get_user_data_dir(), UUID, "usage.json"]);
-        this._data = this._load();
+        this._data = {};
+        this._load();
     }
 
     _load() {
-        try {
-            let [ok, contents] = GLib.file_get_contents(this._path);
-            if (!ok)
-                return {};
-            return JSON.parse(ByteArray.toString(contents));
-        } catch (e) {
-            return {};
-        }
+        let file = Gio.File.new_for_path(this._path);
+        file.load_contents_async(null, (source, result) => {
+            try {
+                let [ok, contents] = source.load_contents_finish(result);
+                if (ok)
+                    this._data = JSON.parse(ByteArray.toString(contents));
+            } catch (e) {
+                // Missing on first run, or corrupt - keep the empty default.
+            }
+        });
     }
 
     _save() {
@@ -330,7 +334,7 @@ function buildSystemActions() {
             name: _("Open Settings"),
             keywords: normalize(_("preferences control panel")),
             iconName: "preferences-system-symbolic",
-            run: () => Util.spawnCommandLine("cinnamon-settings"),
+            run: () => Util.spawn(["cinnamon-settings"]),
         },
     ];
 }
@@ -512,7 +516,7 @@ class LauncherDialog extends ModalDialog.ModalDialog {
             if (this._searchEntry.get_text().length > 0) {
                 this._searchEntry.set_text("");
             } else {
-                Util.spawnCommandLineAsync(`xlet-settings extension ${this._uuid}`);
+                Util.spawn(["xlet-settings", "extension", this._uuid]);
                 this.close();
             }
         });
