@@ -20,6 +20,8 @@ const {
     BASE_DIALOG_WIDTH,
     BASE_ICON_SIZE,
     SEARCH_DEBOUNCE_MS,
+    INITIAL_ROW_FILL_COUNT,
+    ROW_FILL_CHUNK_SIZE,
     ROW_ANIMATION_STEP_MS,
     ROW_ANIMATION_MAX_DELAY_MS,
     ROW_ANIMATION_DURATION_MS,
@@ -342,14 +344,33 @@ function wireRowInteractions(actor, row) {
 }
 
 // Persistent per app/action; re-filtering only updates title markup, not the actor tree.
+// Actors and the icon texture are built on first display, not up front.
 class ResultRow {
     constructor(opts) {
         this.kind = opts.kind;
         this.name = opts.name;
         this.nameNorm = normalize(opts.name);
         this.searchText = opts.searchText || this.nameNorm;
+        this._opts = opts;
         this._onActivate = opts.onActivate;
+
+        this.actor = null;
+        this.titleLabel = null;
+        this.subtitleLabel = null;
+        this._matches = null;
         this._highlighted = false;
+        this._selected = false;
+        this._subtitleVisible = opts.subtitleVisible !== false;
+    }
+
+    getActor() {
+        if (!this.actor)
+            this._build();
+        return this.actor;
+    }
+
+    _build() {
+        let opts = this._opts;
 
         this.actor = new St.BoxLayout({
             style_class: "cinnamon-launcher-row" + (opts.hero ? " cinnamon-launcher-row-hero" : ""),
@@ -358,7 +379,7 @@ class ResultRow {
             width: opts.width,
         });
 
-        let icon = opts.iconTexture || null;
+        let icon = opts.createIcon ? opts.createIcon() : null;
         if (!icon) {
             icon = new St.Icon({
                 icon_name: opts.iconName || "application-x-executable",
@@ -377,19 +398,24 @@ class ResultRow {
         if (opts.subtitle) {
             this.subtitleLabel = new St.Label({ text: opts.subtitle, style_class: "cinnamon-launcher-row-subtitle" });
             this.subtitleLabel.clutter_text.ellipsize = Pango.EllipsizeMode.END;
-            this.subtitleLabel.visible = opts.subtitleVisible !== false;
+            this.subtitleLabel.visible = this._subtitleVisible;
             textBox.add_child(this.subtitleLabel);
         }
 
         this.actor.add_child(textBox);
 
         wireRowInteractions(this.actor, this);
+
+        if (this._matches)
+            this._applyHighlight();
+        if (this._selected)
+            this.actor.add_style_pseudo_class("selected");
     }
 
-    setTitleHighlight(matches) {
-        if (matches && matches.length > 0) {
+    _applyHighlight() {
+        if (this._matches) {
             this.titleLabel.clutter_text.set_use_markup(true);
-            this.titleLabel.clutter_text.set_markup(buildHighlightMarkup(this.name, matches));
+            this.titleLabel.clutter_text.set_markup(buildHighlightMarkup(this.name, this._matches));
             this._highlighted = true;
         } else if (this._highlighted) {
             this.titleLabel.clutter_text.set_use_markup(false);
@@ -398,7 +424,20 @@ class ResultRow {
         }
     }
 
+    setTitleHighlight(matches) {
+        this._matches = (matches && matches.length > 0) ? matches : null;
+        if (this.actor)
+            this._applyHighlight();
+    }
+
+    // Selection sweeps every row on each arrow key; a pseudo-class change
+    // invalidates that row's style, so only act on an actual change.
     setSelected(selected) {
+        if (this._selected === selected)
+            return;
+        this._selected = selected;
+        if (!this.actor)
+            return;
         if (selected)
             this.actor.add_style_pseudo_class("selected");
         else
@@ -406,6 +445,7 @@ class ResultRow {
     }
 
     setSubtitleVisible(visible) {
+        this._subtitleVisible = visible;
         if (this.subtitleLabel)
             this.subtitleLabel.visible = visible;
     }
@@ -415,7 +455,10 @@ class ResultRow {
     }
 
     destroy() {
-        this.actor.destroy();
+        if (this.actor) {
+            this.actor.destroy();
+            this.actor = null;
+        }
     }
 }
 
@@ -494,11 +537,12 @@ class LauncherDialog extends ModalDialog.ModalDialog {
         this._visibleRows = [];
         this._selectedIndex = -1;
         this._filterTimeoutId = 0;
+        this._pendingItems = [];
+        this._pendingIndex = 0;
+        this._fillIdleId = 0;
 
-        // Building rows touches theme-node/size negotiation, which St only
-        // resolves correctly once this dialog is mapped - so the very first
-        // population is deferred to the first open() (see toggle()) rather
-        // than done here.
+        // Deferred to the first open(): enabling shouldn't pay for a list that
+        // may never be shown.
         this._appsDirty = true;
 
         this._appSystem = Cinnamon.AppSystem.get_default();
@@ -614,6 +658,7 @@ class LauncherDialog extends ModalDialog.ModalDialog {
 
     close(timestamp) {
         this._cancelPendingFilter();
+        this._stopFill();
         this._easeActor(this.dialogLayout, {
             scale_x: 0.97,
             scale_y: 0.97,
@@ -629,6 +674,7 @@ class LauncherDialog extends ModalDialog.ModalDialog {
             .filter(Boolean).join(" "));
         let description = app.get_description();
         let subtitle = (description && description !== name) ? description : null;
+        let iconSize = this._metrics.iconSize;
 
         let row = new ResultRow({
             kind: "app",
@@ -637,8 +683,8 @@ class LauncherDialog extends ModalDialog.ModalDialog {
             subtitle,
             subtitleVisible: this.show_descriptions,
             width: this._metrics.width,
-            iconSize: this._metrics.iconSize,
-            iconTexture: app.create_icon_texture(this._metrics.iconSize),
+            iconSize,
+            createIcon: () => app.create_icon_texture(iconSize),
             onActivate: () => {
                 this._usage.recordLaunch(app.get_id());
                 app.open_new_window(-1);
@@ -746,6 +792,7 @@ class LauncherDialog extends ModalDialog.ModalDialog {
     }
 
     _applyFilter(rawQuery, animate = false) {
+        this._stopFill();
         this._list.remove_all_children();
 
         if (this._calculatorRow) {
@@ -823,32 +870,75 @@ class LauncherDialog extends ModalDialog.ModalDialog {
             actionMatches.forEach(({ entry }) => ordered.push({ row: entry }));
         }
 
-        this._visibleRows = [];
-        let rowIndex = 0;
-        for (let item of ordered) {
-            if (item.header) {
-                this._list.add_child(this._makeSectionHeader(item.header));
-            } else {
-                this._list.add_child(item.row.actor);
-                this._visibleRows.push(item.row);
-                if (animate) {
-                    this._animateRowIn(item.row.actor, rowIndex++);
-                } else {
-                    item.row.actor.remove_all_transitions();
-                    item.row.actor.opacity = 255;
-                    item.row.actor.translation_y = 0;
-                }
-            }
-        }
+        this._visibleRows = ordered.filter(item => item.row).map(item => item.row);
+        this._pendingItems = ordered;
+        this._pendingIndex = 0;
+
+        // Only the first batch animates; later rows land past the stagger cap anyway.
+        if (this._fillRows(INITIAL_ROW_FILL_COUNT, animate && this.enable_animations))
+            this._scheduleFill();
 
         this._selectedIndex = this._visibleRows.length > 0 ? 0 : -1;
         this._updateSelection();
     }
 
+    // St.BoxLayout has no virtualization: every parented row is laid out whether
+    // on screen or not.
+    _fillRows(limit, animate) {
+        let added = 0;
+
+        while (this._pendingIndex < this._pendingItems.length && added < limit) {
+            let item = this._pendingItems[this._pendingIndex++];
+
+            if (item.header) {
+                this._list.add_child(this._makeSectionHeader(item.header));
+                continue;
+            }
+
+            let actor = item.row.getActor();
+            this._list.add_child(actor);
+
+            if (animate) {
+                this._animateRowIn(actor, added);
+            } else {
+                actor.remove_all_transitions();
+                actor.opacity = 255;
+                actor.translation_y = 0;
+            }
+
+            added++;
+        }
+
+        return this._pendingIndex < this._pendingItems.length;
+    }
+
+    _scheduleFill() {
+        this._fillIdleId = GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+            if (this._fillRows(ROW_FILL_CHUNK_SIZE, false))
+                return GLib.SOURCE_CONTINUE;
+            this._fillIdleId = 0;
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
+    _stopFill() {
+        if (this._fillIdleId) {
+            GLib.source_remove(this._fillIdleId);
+            this._fillIdleId = 0;
+        }
+    }
+
     _updateSelection() {
+        let selected = this._visibleRows[this._selectedIndex];
+
+        // Nav can outrun the idle fill; the row must be in the list to scroll to it.
+        if (selected && !selected.actor) {
+            this._stopFill();
+            this._fillRows(Infinity, false);
+        }
+
         this._visibleRows.forEach((row, i) => row.setSelected(i === this._selectedIndex));
 
-        let selected = this._visibleRows[this._selectedIndex];
         if (selected)
             this._ensureRowVisible(selected);
     }
@@ -921,6 +1011,7 @@ class LauncherDialog extends ModalDialog.ModalDialog {
         Main.keybindingManager.removeHotKey(HOTKEY_ID);
         this.settings.finalize();
         this._cancelPendingFilter();
+        this._stopFill();
         if (this._searchIconClickedId)
             this._searchEntry.disconnect(this._searchIconClickedId);
         this._appSystem.disconnect(this._installedChangedId);
