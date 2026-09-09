@@ -20,6 +20,7 @@ const {
     BASE_DIALOG_WIDTH,
     BASE_ICON_SIZE,
     SEARCH_DEBOUNCE_MS,
+    HOTKEY_DEBOUNCE_MS,
     INITIAL_ROW_FILL_COUNT,
     ROW_FILL_CHUNK_SIZE,
     ROW_ANIMATION_STEP_MS,
@@ -544,6 +545,7 @@ class LauncherDialog extends ModalDialog.ModalDialog {
         this._visibleRows = [];
         this._selectedIndex = -1;
         this._filterTimeoutId = 0;
+        this._lastToggleTime = 0;
         this._pendingItems = [];
         this._pendingIndex = 0;
         this._fillIdleId = 0;
@@ -629,6 +631,11 @@ class LauncherDialog extends ModalDialog.ModalDialog {
     }
 
     toggle() {
+        let now = GLib.get_monotonic_time() / 1000;
+        if (now - this._lastToggleTime < HOTKEY_DEBOUNCE_MS)
+            return;
+        this._lastToggleTime = now;
+
         if (this.state === ModalDialog.State.OPENED || this.state === ModalDialog.State.OPENING) {
             this.close();
             return;
