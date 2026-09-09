@@ -17,7 +17,7 @@
  */
 'use strict';
 
-var DEBUG = false;
+var DEBUG = true;
 
 var UUID = "mouse-click-effects@anaximeno";
 
