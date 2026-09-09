@@ -61,8 +61,8 @@ class MouseClickEffects {
 		this.app_icons_dir = `${metadata.path}/../icons`;
 		this.pause_icon_path = `${this.app_icons_dir}/extra/pause.svg`;
 		this.settings = this._setup_settings(this.metadata.uuid);
-		this.data_dir = this._init_data_dir(this.metadata.uuid);
 		this.colored_icon_store = {};
+		this._pause_icon = null;
 
 		this.clickAnimator = ClickAnimationFactory.createForMode(this.animation_mode);
 
@@ -79,17 +79,6 @@ class MouseClickEffects {
 
 		this.enabled = false;
 		this.set_active(false);
-	}
-
-	_init_data_dir(uuid) {
-		let data_dir = `${GLib.get_user_cache_dir()}/${uuid}`;
-
-		if (GLib.mkdir_with_parents(`${data_dir}/icons`, 0o777) < 0) {
-			logError(`Failed to create cache dir at ${data_dir}`);
-			throw new Error(`Failed to create cache dir at ${data_dir}`);
-		}
-
-		return data_dir;
 	}
 
 	_setup_settings(uuid) {
@@ -279,29 +268,22 @@ class MouseClickEffects {
 		}
 	}
 
-	get_icon_cache_name(mode, click_type, color) {
+	get_icon_cache_key(mode, click_type, color) {
 		let safe_mode = String(mode).replace(/[^a-zA-Z0-9._-]/g, "_");
 		let safe_click_type = String(click_type).replace(/[^a-zA-Z0-9._-]/g, "_");
 		let safe_color = String(color).replace(/[^a-zA-Z0-9._-]/g, "_");
-		return `${safe_mode}_${safe_click_type}_${safe_color}.svg`;
+		return `${safe_mode}_${safe_click_type}_${safe_color}`;
 	}
 
 	get_click_icon(mode, click_type, color) {
-		let name = this.get_icon_cache_name(mode, click_type, color);
-		let path = `${this.data_dir}/icons/${name}`;
-		return this.get_icon_cached(path);
+		return this.colored_icon_store[this.get_icon_cache_key(mode, click_type, color)] || null;
 	}
 
-	get_icon_cached(path) {
-		if (this.colored_icon_store[path])
-			return this.colored_icon_store[path];
+	get_pause_icon() {
+		if (!this._pause_icon && GLib.file_test(this.pause_icon_path, GLib.FileTest.IS_REGULAR))
+			this._pause_icon = Gio.icon_new_for_string(this.pause_icon_path);
 
-		if (GLib.file_test(path, GLib.FileTest.IS_REGULAR)) {
-			this.colored_icon_store[path] = Gio.icon_new_for_string(path);
-			return this.colored_icon_store[path];
-		}
-
-		return null;
+		return this._pause_icon;
 	}
 
 	disable() {
@@ -315,6 +297,7 @@ class MouseClickEffects {
 		this.unset_keybindings();
 		this.settings.finalize();
 		this.colored_icon_store = null;
+		this._pause_icon = null;
 		this.display_click = null;
 		this.clickAnimator = null;
 	}
@@ -475,7 +458,8 @@ class MouseClickEffects {
 	}
 
 	create_icon_data(click_type, color) {
-		if (this.get_click_icon(this.icon_mode, click_type, color))
+		let key = this.get_icon_cache_key(this.icon_mode, click_type, color);
+		if (this.colored_icon_store[key])
 			return;
 
 		let source = Gio.File.new_for_path(`${this.app_icons_dir}/${this.icon_mode}.svg`);
@@ -489,21 +473,7 @@ class MouseClickEffects {
 			}
 
 			contents = ByteArray.toString(contents).replace('fill="#000000"', `fill="${color}"`);
-
-			let name = this.get_icon_cache_name(this.icon_mode, click_type, color);
-			let path = `${this.data_dir}/icons/${name}`;
-			let dest = Gio.File.new_for_path(path);
-
-			// replace_contents_async creates the file if it doesn't exist yet.
-			dest.replace_contents_async(contents, null, false, Gio.FileCreateFlags.REPLACE_DESTINATION, null,
-				(d, res) => {
-					try {
-						d.replace_contents_finish(res);
-						logInfo(`created colored icon cache for ${name}`);
-					} catch (e) {
-						logError(`failed to write colored icon cache for ${name}: ${e}`);
-					}
-				});
+			this.colored_icon_store[key] = Gio.BytesIcon.new(new GLib.Bytes(contents));
 		});
 	}
 
@@ -529,7 +499,7 @@ class MouseClickEffects {
 		let animator = this.clickAnimator;
 
 		if (click_type === ClickType.PAUSE_ON) {
-			icon = this.get_icon_cached(this.pause_icon_path);
+			icon = this.get_pause_icon();
 			animator = ClickAnimationFactory.createForMode(ClickAnimationModes.BLINK);
 		} else if (click_type === ClickType.PAUSE_OFF) {
 			icon = this.get_click_icon(this.icon_mode, ClickType.LEFT, this.left_click_color);
