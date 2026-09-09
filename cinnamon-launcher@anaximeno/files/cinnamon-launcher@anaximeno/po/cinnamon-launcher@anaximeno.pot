@@ -8,7 +8,7 @@ msgstr ""
 "Project-Id-Version: cinnamon-launcher@anaximeno 0.1.0\n"
 "Report-Msgid-Bugs-To: https://github.com/linuxmint/cinnamon-spices-"
 "extensions/issues\n"
-"POT-Creation-Date: 2026-09-08 03:46-0100\n"
+"POT-Creation-Date: 2026-09-08 23:20-0100\n"
 "PO-Revision-Date: \n"
 "Last-Translator: \n"
 "Language-Team: \n"
@@ -17,59 +17,59 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 
-#. launcher.js:306
+#. launcher.js:308
 msgid "Lock Screen"
 msgstr ""
 
-#. launcher.js:307
+#. launcher.js:309
 msgid "lock screen screensaver"
 msgstr ""
 
-#. launcher.js:313
+#. launcher.js:315
 msgid "Log Out"
 msgstr ""
 
-#. launcher.js:314
+#. launcher.js:316
 msgid "logout sign out leave session"
 msgstr ""
 
-#. launcher.js:320
+#. launcher.js:322
 msgid "Shut Down"
 msgstr ""
 
-#. launcher.js:321
+#. launcher.js:323
 msgid "shutdown power off turn off"
 msgstr ""
 
-#. launcher.js:327
+#. launcher.js:329
 msgid "Open Settings"
 msgstr ""
 
-#. launcher.js:328
+#. launcher.js:330
 msgid "preferences control panel"
 msgstr ""
 
-#. launcher.js:443
+#. launcher.js:486
 msgid "Search apps, actions, or type a sum…"
 msgstr ""
 
-#. launcher.js:657
+#. launcher.js:703
 msgid "System Action"
 msgstr ""
 
-#. launcher.js:775
+#. launcher.js:822
 msgid "Frequently Used"
 msgstr ""
 
-#. launcher.js:777
+#. launcher.js:824
 msgid "All Applications"
 msgstr ""
 
-#. launcher.js:819
+#. launcher.js:866
 msgid "Applications"
 msgstr ""
 
-#. launcher.js:822
+#. launcher.js:869
 msgid "Actions"
 msgstr ""
 
