@@ -22,22 +22,14 @@ const Settings = imports.ui.settings;
 const DND = imports.ui.dnd;
 const Gettext = imports.gettext;
 const ByteArray = imports.byteArray;
-const { Atspi, GLib, Gio } = imports.gi;
+const { GLib, Gio } = imports.gi;
 const { ClickAnimationFactory, ClickAnimationModes } = require("./clickAnimations.js");
 const { Debouncer, logInfo, logError, IdleMonitor } = require("./helpers.js");
 const { UUID, PAUSE_EFFECTS_KEY, CLICK_DEBOUNCE_MS } = require("./constants.js");
 const { MouseMovementTracker } = require("./mouseMovementTracker.js");
+const { MouseClickListener } = require("./mouseClickListener.js");
 
 Gettext.bindtextdomain(UUID, `${GLib.get_user_data_dir()}/locale`);
-
-const MOUSE_CLICK_EVENTS = Object.freeze([
-	'mouse:b1p',
-	'mouse:b2p',
-	'mouse:b3p',
-	'mouse:button:1p',
-	'mouse:button:2p',
-	'mouse:button:3p'
-]);
 
 const ClickType = Object.freeze({
 	LEFT: "left_click",
@@ -64,11 +56,10 @@ class MouseClickEffects {
 		this.colored_icon_store = {};
 		this._pause_icon = null;
 
-		this.clickAnimator = ClickAnimationFactory.createForMode(this.animation_mode);
+		this.click_animator = ClickAnimationFactory.createForMode(this.animation_mode);
 
-		this.listener = null;
-		this._mouse_click_listener_registered = false;
-		this.idleMonitor = null;
+		this.mouse_click_listener = new MouseClickListener(this._dispatch_click.bind(this));
+		this.idle_monitor = null;
 		this._idle_listener_id = 0;
 		this._idle_animation_source_id = 0;
 
@@ -263,8 +254,8 @@ class MouseClickEffects {
 	}
 
 	update_animation_mode() {
-		if (!this.clickAnimator || this.clickAnimator.mode != this.animation_mode) {
-			this.clickAnimator = ClickAnimationFactory.createForMode(this.animation_mode);
+		if (!this.click_animator || this.click_animator.mode != this.animation_mode) {
+			this.click_animator = ClickAnimationFactory.createForMode(this.animation_mode);
 		}
 	}
 
@@ -293,13 +284,14 @@ class MouseClickEffects {
 	destroy() {
 		DND.removeDragMonitor(this);
 		this.set_active(false);
-		this._destroy_mouse_click_listener();
+		this.mouse_click_listener.destroy();
+		this.mouse_click_listener = null;
 		this.unset_keybindings();
 		this.settings.finalize();
 		this.colored_icon_store = null;
 		this._pause_icon = null;
 		this.display_click = null;
-		this.clickAnimator = null;
+		this.click_animator = null;
 	}
 
 	update_colored_icons() {
@@ -324,35 +316,6 @@ class MouseClickEffects {
 			this._start_idle_monitor();
 	}, 300);
 
-	_get_mouse_click_listener() {
-		if (!this.listener)
-			this.listener = Atspi.EventListener.new(this.on_mouse_click.bind(this));
-
-		return this.listener;
-	}
-
-	_register_mouse_click_listener() {
-		if (this._mouse_click_listener_registered)
-			return;
-
-		let listener = this._get_mouse_click_listener();
-		MOUSE_CLICK_EVENTS.forEach(event_name => listener.register(event_name));
-		this._mouse_click_listener_registered = true;
-	}
-
-	_deregister_mouse_click_listener() {
-		if (!this.listener || !this._mouse_click_listener_registered)
-			return;
-
-		MOUSE_CLICK_EVENTS.forEach(event_name => this.listener.deregister(event_name));
-		this._mouse_click_listener_registered = false;
-	}
-
-	_destroy_mouse_click_listener() {
-		this._deregister_mouse_click_listener();
-		this.listener = null;
-	}
-
 	_start_mouse_movement_tracker() {
 		if (!this.mouse_movement_tracker_enabled || this.mouse_movement_tracker)
 			return;
@@ -375,13 +338,13 @@ class MouseClickEffects {
 	}
 
 	_start_idle_monitor() {
-		if (!this.mouse_idle_watcher_enabled || this.idleMonitor)
+		if (!this.mouse_idle_watcher_enabled || this.idle_monitor)
 			return;
 
-		this.idleMonitor = new IdleMonitor(this._get_idle_delay_ms());
-		this._idle_listener_id = this.idleMonitor.add_idle_listener(this._handle_idle_state_changed.bind(this));
+		this.idle_monitor = new IdleMonitor(this._get_idle_delay_ms());
+		this._idle_listener_id = this.idle_monitor.add_idle_listener(this._handle_idle_state_changed.bind(this));
 
-		if (this.idleMonitor.idle)
+		if (this.idle_monitor.idle)
 			this._start_idle_animation_loop();
 	}
 
@@ -398,16 +361,16 @@ class MouseClickEffects {
 	_stop_idle_monitor() {
 		this._stop_idle_animation_loop();
 
-		if (!this.idleMonitor)
+		if (!this.idle_monitor)
 			return;
 
 		if (this._idle_listener_id) {
-			this.idleMonitor.remove_idle_listener(this._idle_listener_id);
+			this.idle_monitor.remove_idle_listener(this._idle_listener_id);
 			this._idle_listener_id = 0;
 		}
 
-		this.idleMonitor.destroy();
-		this.idleMonitor = null;
+		this.idle_monitor.destroy();
+		this.idle_monitor = null;
 	}
 
 	_handle_idle_state_changed(is_idle) {
@@ -443,12 +406,12 @@ class MouseClickEffects {
 	set_active(enabled) {
 		this.enabled = enabled;
 
-		this._deregister_mouse_click_listener();
+		this.mouse_click_listener.stop();
 		this._stop_mouse_movement_tracker();
 		this._stop_idle_monitor();
 
 		if (enabled) {
-			this._register_mouse_click_listener();
+			this.mouse_click_listener.start();
 			this._start_mouse_movement_tracker();
 			this._start_idle_monitor();
 			logInfo("activated");
@@ -496,7 +459,7 @@ class MouseClickEffects {
 		this.update_animation_mode();
 
 		let icon = null;
-		let animator = this.clickAnimator;
+		let animator = this.click_animator;
 
 		if (click_type === ClickType.PAUSE_ON) {
 			icon = this.get_pause_icon();
@@ -533,20 +496,17 @@ class MouseClickEffects {
 		}
 	}
 
-	on_mouse_click(event) {
-		switch (event.type) {
-			case 'mouse:b1p':
-			case 'mouse:button:1p':
+	_dispatch_click(button) {
+		switch (button) {
+			case 1:
 				if (this.left_click_effect_enabled)
 					this.display_click(ClickType.LEFT, this.left_click_color);
 				break;
-			case 'mouse:b2p':
-			case 'mouse:button:2p':
+			case 2:
 				if (this.middle_click_effect_enabled)
 					this.display_click(ClickType.MIDDLE, this.middle_click_color);
 				break;
-			case 'mouse:b3p':
-			case 'mouse:button:3p':
+			case 3:
 				if (this.right_click_effect_enabled)
 					this.display_click(ClickType.RIGHT, this.right_click_color);
 				break;
@@ -567,6 +527,5 @@ function disable() {
 }
 
 function init(metadata) {
-	if (!Atspi.is_initialized()) Atspi.init();
 	if (!extension) extension = new MouseClickEffects(metadata);
 }
