@@ -28,7 +28,7 @@ const { Debouncer, logInfo, logError, IdleMonitor } = require("./helpers.js");
 const { UUID, PAUSE_EFFECTS_KEY, CLICK_DEBOUNCE_MS } = require("./constants.js");
 const { MouseMovementTracker } = require("./mouseMovementTracker.js");
 
-Gettext.bindtextdomain(UUID, `${GLib.get_home_dir()}/.local/share/locale`);
+Gettext.bindtextdomain(UUID, `${GLib.get_user_data_dir()}/locale`);
 
 const MOUSE_CLICK_EVENTS = Object.freeze([
 	'mouse:b1p',
@@ -476,26 +476,35 @@ class MouseClickEffects {
 
 	create_icon_data(click_type, color) {
 		if (this.get_click_icon(this.icon_mode, click_type, color))
-			return true;
+			return;
 
 		let source = Gio.File.new_for_path(`${this.app_icons_dir}/${this.icon_mode}.svg`);
-		let [l_success, contents] = source.load_contents(null);
+		source.load_contents_async(null, (src, result) => {
+			let contents;
+			try {
+				[, contents] = src.load_contents_finish(result);
+			} catch (e) {
+				logError(`failed to read icon source for ${this.icon_mode}: ${e}`);
+				return;
+			}
 
-		contents = ByteArray.toString(contents);
-		contents = contents.replace('fill="#000000"', `fill="${color}"`);
+			contents = ByteArray.toString(contents).replace('fill="#000000"', `fill="${color}"`);
 
-		let name = this.get_icon_cache_name(this.icon_mode, click_type, color);
-		let path = `${this.data_dir}/icons/${name}`;
-		let dest = Gio.File.new_for_path(path);
+			let name = this.get_icon_cache_name(this.icon_mode, click_type, color);
+			let path = `${this.data_dir}/icons/${name}`;
+			let dest = Gio.File.new_for_path(path);
 
-		if (!dest.query_exists(null))
-			dest.create(Gio.FileCreateFlags.NONE, null);
-
-		let [r_success, tag] = dest.replace_contents(contents, null, false, Gio.FileCreateFlags.REPLACE_DESTINATION, null);
-
-		if (r_success) logInfo(`created colored icon cache for ${name}`);
-
-		return r_success;
+			// replace_contents_async creates the file if it doesn't exist yet.
+			dest.replace_contents_async(contents, null, false, Gio.FileCreateFlags.REPLACE_DESTINATION, null,
+				(d, res) => {
+					try {
+						d.replace_contents_finish(res);
+						logInfo(`created colored icon cache for ${name}`);
+					} catch (e) {
+						logError(`failed to write colored icon cache for ${name}: ${e}`);
+					}
+				});
+		});
 	}
 
 	display_click = (new Debouncer()).debounce((...args) => {
